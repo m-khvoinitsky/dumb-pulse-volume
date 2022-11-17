@@ -1,6 +1,6 @@
-extern crate notify_rust;
 extern crate nix;
-use structopt::StructOpt;
+use notify_rust::{Notification, Hint};
+use clap::Parser;
 use std::iter::FromIterator;
 
 extern crate pulsectl;
@@ -68,56 +68,56 @@ impl VolumeControlTarget for pulsectl::controllers::types::ApplicationInfo {
     }
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = env!("CARGO_PKG_NAME"), about = "Very simple program to control volume of currently playing device", author = "Mikhail Khvoinitsky")]
+#[derive(Parser, Debug)]
+#[command(name = env!("CARGO_PKG_NAME"), author = "Mikhail Khvoinitsky", version, about = "Very simple program to control volume of currently playing device", long_about = None)]
 struct Opt {
     /// Verbose mode
-    #[structopt(short, long)]
+    #[arg(short, long)]
     verbose: bool,
 
     /// Control application, not device
-    #[structopt(short, long)]
+    #[arg(short, long)]
     application: bool,
 
     /// Increase volume of PERCENT
-    #[structopt(long, value_name = "PERCENT", display_order(1))]
+    #[arg(long, value_name = "PERCENT", display_order(1))]
     increase: Option<f64>,
 
     /// Decrease volume of PERCENT
-    #[structopt(long, value_name = "PERCENT", display_order(1), conflicts_with = "increase")]
+    #[arg(long, value_name = "PERCENT", display_order(1), conflicts_with = "increase")]
     decrease: Option<f64>,
 
     /// Toggle mute
-    #[structopt(short, long, display_order(1), conflicts_with = "increase")]
+    #[arg(short, long, display_order(1), conflicts_with = "increase")]
     mute_toggle: bool,
 
     /// Notification duration
-    #[structopt(long, default_value = "1", display_order(10), value_name = "SECONDS")]
+    #[arg(long, default_value = "1", display_order(10), value_name = "SECONDS")]
     duration: f64,
 
     /// Notification icon
-    #[structopt(long, default_value = "audio-volume-muted", display_order(11), value_name = "ICON")]
+    #[arg(long, default_value = "audio-volume-muted", display_order(11), value_name = "ICON")]
     icon_muted: std::string::String,
 
     /// Notification icon
-    #[structopt(long, default_value = "audio-volume-high", display_order(11), value_name = "ICON")]
+    #[arg(long, default_value = "audio-volume-high", display_order(11), value_name = "ICON")]
     icon: std::string::String,
 
     /// Notification title
-    #[structopt(long, default_value = "Volume", display_order(12), value_name = "ICON")]
+    #[arg(long, default_value = "Volume", display_order(12), value_name = "ICON")]
     title: std::string::String,
 
     /// Steps for smooth transition (1 to disable)
-    #[structopt(long, default_value = "1", display_order(20), value_name = "NUMBER")]
+    #[arg(long, default_value = "1", display_order(20), value_name = "NUMBER")]
     steps: u64,
 
     /// Step interval
-    #[structopt(long, default_value = "0", display_order(21), value_name = "MILLISECONDS")]
+    #[arg(long, default_value = "0", display_order(21), value_name = "MILLISECONDS")]
     step_interval: u64,
 }
 
 fn adjust_volume(targets: Vec<impl VolumeControlTarget>, opt: Opt, tmpfile_base: &str, mut controller: SinkController) {
-    let prev_device_filename = format!("{}_{}", tmpfile_base, "previously_controlled_device_name");
+    let prev_device_filename = format!("{}_{}", tmpfile_base, "previously_controlled_name");
     let (devices_to_control, write_prev_device) = {
         let running_devices: Vec<_> = targets.iter().filter(|target| target.is_running()).collect();
         if running_devices.len() > 0 {
@@ -246,7 +246,7 @@ fn adjust_volume(targets: Vec<impl VolumeControlTarget>, opt: Opt, tmpfile_base:
 }
 
 fn main() {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
 
     let mut tmp = std::env::temp_dir();
     tmp.push(env!("CARGO_PKG_NAME"));
@@ -256,7 +256,7 @@ fn main() {
     let lockfile = std::fs::File::create(&lockfile_path).unwrap();
     nix::fcntl::flock(std::os::unix::io::AsRawFd::as_raw_fd(&lockfile), nix::fcntl::FlockArg::LockExclusiveNonblock).expect("Already running");
 
-    let mut controller = SinkController::create();
+    let mut controller = SinkController::create().unwrap();
 
     if opt.application {
         adjust_volume(controller.list_applications().expect("Could not get list of playback applications"), opt, tmpfile_base, controller);
@@ -277,7 +277,7 @@ fn show_notification(prev_id: u32, new_volume: u32, dev_description: &String, ic
         .summary("Volume")
         .body(format!("{}% | {}", percentage, dev_description).as_str())
         .icon(icon)
-        .hint(notify_rust::NotificationHint::CustomInt("value".to_string(), progressbar_percentage))
+        .hint(notify_rust::Hint::CustomInt("value".to_string(), progressbar_percentage))
         .timeout(notify_rust::Timeout::Milliseconds((duration * 1000f64) as u32))
         .id(prev_id)
         .show().unwrap();
