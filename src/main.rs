@@ -1,5 +1,4 @@
 extern crate nix;
-use notify_rust::{Notification, Hint};
 use clap::Parser;
 use std::iter::FromIterator;
 
@@ -263,8 +262,6 @@ fn main() {
     } else {
         adjust_volume(controller.list_devices().expect("Could not get list of playback devices"), opt, tmpfile_base, controller);
     }
-
-    std::fs::remove_file(&lockfile_path).unwrap();
 }
 
 fn show_notification(prev_id: u32, new_volume: u32, dev_description: &String, icon: &str, duration: f64) -> u32 {
